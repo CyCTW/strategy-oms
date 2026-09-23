@@ -1,0 +1,456 @@
+{
+  "source_sha256": "84f81408336320428287a15465dab6880edb604c3729958ae3b78e2e3076f0d4",
+  "binary_sha256": "be8820c1b76a3b8bf388d2c8812fb1843d217f79dd417cd22b59203ca5a4b392",
+  "compile": [
+    "/usr/bin/clang++",
+    "-std=c++20",
+    "-O3",
+    "-DNDEBUG",
+    "-Wall",
+    "-Wextra",
+    "-Werror",
+    "-I",
+    "/Users/cyctw/project/strategy-oms/cpp/include",
+    "-isystem",
+    "/Users/cyctw/project/strategy-oms/cpp/third_party/abseil-cpp",
+    "-c",
+    "/Users/cyctw/project/strategy-oms/cpp/price_dual_growth.cpp",
+    "-o",
+    "/Users/cyctw/project/strategy-oms/cpp/build/price_dual_growth.o"
+  ],
+  "link": [
+    "/usr/bin/clang++",
+    "-O3",
+    "-DNDEBUG",
+    "-isysroot",
+    "/Library/Developer/CommandLineTools/SDKs/MacOSX26.0.sdk",
+    "-Wl,-search_paths_first",
+    "-Wl,-headerpad_max_install_names",
+    "/Users/cyctw/project/strategy-oms/cpp/build/price_dual_growth.o",
+    "-o",
+    "/Users/cyctw/project/strategy-oms/cpp/build/price_dual_growth",
+    "third_party/abseil-cpp/absl/container/libabsl_raw_hash_set.a",
+    "third_party/abseil-cpp/absl/strings/libabsl_cord.a",
+    "third_party/abseil-cpp/absl/strings/libabsl_cordz_info.a",
+    "third_party/abseil-cpp/absl/strings/libabsl_cord_internal.a",
+    "third_party/abseil-cpp/absl/strings/libabsl_cordz_functions.a",
+    "third_party/abseil-cpp/absl/strings/libabsl_cordz_handle.a",
+    "third_party/abseil-cpp/absl/crc/libabsl_crc_cord_state.a",
+    "third_party/abseil-cpp/absl/crc/libabsl_crc32c.a",
+    "third_party/abseil-cpp/absl/crc/libabsl_crc_internal.a",
+    "third_party/abseil-cpp/absl/crc/libabsl_crc_cpu_detect.a",
+    "third_party/abseil-cpp/absl/strings/libabsl_str_format_internal.a",
+    "third_party/abseil-cpp/absl/hash/libabsl_hash.a",
+    "third_party/abseil-cpp/absl/types/libabsl_bad_optional_access.a",
+    "third_party/abseil-cpp/absl/hash/libabsl_city.a",
+    "third_party/abseil-cpp/absl/types/libabsl_bad_variant_access.a",
+    "third_party/abseil-cpp/absl/hash/libabsl_low_level_hash.a",
+    "third_party/abseil-cpp/absl/container/libabsl_hashtablez_sampler.a",
+    "third_party/abseil-cpp/absl/profiling/libabsl_exponential_biased.a",
+    "third_party/abseil-cpp/absl/synchronization/libabsl_synchronization.a",
+    "third_party/abseil-cpp/absl/debugging/libabsl_stacktrace.a",
+    "third_party/abseil-cpp/absl/synchronization/libabsl_graphcycles_internal.a",
+    "third_party/abseil-cpp/absl/synchronization/libabsl_kernel_timeout_internal.a",
+    "third_party/abseil-cpp/absl/time/libabsl_time.a",
+    "third_party/abseil-cpp/absl/time/libabsl_civil_time.a",
+    "third_party/abseil-cpp/absl/time/libabsl_time_zone.a",
+    "-Wl,-framework,CoreFoundation",
+    "third_party/abseil-cpp/absl/debugging/libabsl_symbolize.a",
+    "third_party/abseil-cpp/absl/strings/libabsl_strings.a",
+    "third_party/abseil-cpp/absl/strings/libabsl_strings_internal.a",
+    "third_party/abseil-cpp/absl/strings/libabsl_string_view.a",
+    "third_party/abseil-cpp/absl/base/libabsl_throw_delegate.a",
+    "third_party/abseil-cpp/absl/numeric/libabsl_int128.a",
+    "third_party/abseil-cpp/absl/debugging/libabsl_debugging_internal.a",
+    "third_party/abseil-cpp/absl/base/libabsl_malloc_internal.a",
+    "third_party/abseil-cpp/absl/debugging/libabsl_demangle_internal.a",
+    "third_party/abseil-cpp/absl/debugging/libabsl_demangle_rust.a",
+    "third_party/abseil-cpp/absl/debugging/libabsl_decode_rust_punycode.a",
+    "third_party/abseil-cpp/absl/debugging/libabsl_utf8_for_code_point.a",
+    "third_party/abseil-cpp/absl/base/libabsl_tracing_internal.a",
+    "third_party/abseil-cpp/absl/base/libabsl_base.a",
+    "third_party/abseil-cpp/absl/base/libabsl_raw_logging_internal.a",
+    "third_party/abseil-cpp/absl/base/libabsl_log_severity.a",
+    "third_party/abseil-cpp/absl/base/libabsl_spinlock_wait.a"
+  ],
+  "runs": [
+    {
+      "top_5": [
+        {
+          "step": 14336,
+          "capacity_before": 16383,
+          "capacity_after": 32767,
+          "ns": 198958
+        },
+        {
+          "step": 7168,
+          "capacity_before": 8191,
+          "capacity_after": 16383,
+          "ns": 128041
+        },
+        {
+          "step": 3584,
+          "capacity_before": 4095,
+          "capacity_after": 8191,
+          "ns": 64500
+        },
+        {
+          "step": 1792,
+          "capacity_before": 2047,
+          "capacity_after": 4095,
+          "ns": 30041
+        },
+        {
+          "step": 8535,
+          "capacity_before": 16383,
+          "capacity_after": 16383,
+          "ns": 22458
+        }
+      ],
+      "capacity_changes": [
+        {
+          "step": 0,
+          "capacity_before": 0,
+          "capacity_after": 1,
+          "ns": 1416
+        },
+        {
+          "step": 1,
+          "capacity_before": 1,
+          "capacity_after": 3,
+          "ns": 917
+        },
+        {
+          "step": 3,
+          "capacity_before": 3,
+          "capacity_after": 7,
+          "ns": 291
+        },
+        {
+          "step": 6,
+          "capacity_before": 7,
+          "capacity_after": 15,
+          "ns": 416
+        },
+        {
+          "step": 14,
+          "capacity_before": 15,
+          "capacity_after": 31,
+          "ns": 542
+        },
+        {
+          "step": 28,
+          "capacity_before": 31,
+          "capacity_after": 63,
+          "ns": 833
+        },
+        {
+          "step": 56,
+          "capacity_before": 63,
+          "capacity_after": 127,
+          "ns": 1417
+        },
+        {
+          "step": 112,
+          "capacity_before": 127,
+          "capacity_after": 255,
+          "ns": 3417
+        },
+        {
+          "step": 224,
+          "capacity_before": 255,
+          "capacity_after": 511,
+          "ns": 4750
+        },
+        {
+          "step": 448,
+          "capacity_before": 511,
+          "capacity_after": 1023,
+          "ns": 9083
+        },
+        {
+          "step": 896,
+          "capacity_before": 1023,
+          "capacity_after": 2047,
+          "ns": 15333
+        },
+        {
+          "step": 1792,
+          "capacity_before": 2047,
+          "capacity_after": 4095,
+          "ns": 30041
+        },
+        {
+          "step": 3584,
+          "capacity_before": 4095,
+          "capacity_after": 8191,
+          "ns": 64500
+        },
+        {
+          "step": 7168,
+          "capacity_before": 8191,
+          "capacity_after": 16383,
+          "ns": 128041
+        },
+        {
+          "step": 14336,
+          "capacity_before": 16383,
+          "capacity_after": 32767,
+          "ns": 198958
+        }
+      ]
+    },
+    {
+      "top_5": [
+        {
+          "step": 14336,
+          "capacity_before": 16383,
+          "capacity_after": 32767,
+          "ns": 117542
+        },
+        {
+          "step": 7168,
+          "capacity_before": 8191,
+          "capacity_after": 16383,
+          "ns": 48666
+        },
+        {
+          "step": 3584,
+          "capacity_before": 4095,
+          "capacity_after": 8191,
+          "ns": 29458
+        },
+        {
+          "step": 1792,
+          "capacity_before": 2047,
+          "capacity_after": 4095,
+          "ns": 13584
+        },
+        {
+          "step": 896,
+          "capacity_before": 1023,
+          "capacity_after": 2047,
+          "ns": 7209
+        }
+      ],
+      "capacity_changes": [
+        {
+          "step": 0,
+          "capacity_before": 0,
+          "capacity_after": 1,
+          "ns": 958
+        },
+        {
+          "step": 1,
+          "capacity_before": 1,
+          "capacity_after": 3,
+          "ns": 417
+        },
+        {
+          "step": 3,
+          "capacity_before": 3,
+          "capacity_after": 7,
+          "ns": 125
+        },
+        {
+          "step": 6,
+          "capacity_before": 7,
+          "capacity_after": 15,
+          "ns": 208
+        },
+        {
+          "step": 14,
+          "capacity_before": 15,
+          "capacity_after": 31,
+          "ns": 292
+        },
+        {
+          "step": 28,
+          "capacity_before": 31,
+          "capacity_after": 63,
+          "ns": 334
+        },
+        {
+          "step": 56,
+          "capacity_before": 63,
+          "capacity_after": 127,
+          "ns": 458
+        },
+        {
+          "step": 112,
+          "capacity_before": 127,
+          "capacity_after": 255,
+          "ns": 1292
+        },
+        {
+          "step": 224,
+          "capacity_before": 255,
+          "capacity_after": 511,
+          "ns": 2375
+        },
+        {
+          "step": 448,
+          "capacity_before": 511,
+          "capacity_after": 1023,
+          "ns": 3917
+        },
+        {
+          "step": 896,
+          "capacity_before": 1023,
+          "capacity_after": 2047,
+          "ns": 7209
+        },
+        {
+          "step": 1792,
+          "capacity_before": 2047,
+          "capacity_after": 4095,
+          "ns": 13584
+        },
+        {
+          "step": 3584,
+          "capacity_before": 4095,
+          "capacity_after": 8191,
+          "ns": 29458
+        },
+        {
+          "step": 7168,
+          "capacity_before": 8191,
+          "capacity_after": 16383,
+          "ns": 48666
+        },
+        {
+          "step": 14336,
+          "capacity_before": 16383,
+          "capacity_after": 32767,
+          "ns": 117542
+        }
+      ]
+    },
+    {
+      "top_5": [
+        {
+          "step": 14336,
+          "capacity_before": 16383,
+          "capacity_after": 32767,
+          "ns": 94333
+        },
+        {
+          "step": 7168,
+          "capacity_before": 8191,
+          "capacity_after": 16383,
+          "ns": 48083
+        },
+        {
+          "step": 3584,
+          "capacity_before": 4095,
+          "capacity_after": 8191,
+          "ns": 27333
+        },
+        {
+          "step": 1792,
+          "capacity_before": 2047,
+          "capacity_after": 4095,
+          "ns": 13084
+        },
+        {
+          "step": 896,
+          "capacity_before": 1023,
+          "capacity_after": 2047,
+          "ns": 7292
+        }
+      ],
+      "capacity_changes": [
+        {
+          "step": 0,
+          "capacity_before": 0,
+          "capacity_after": 1,
+          "ns": 667
+        },
+        {
+          "step": 1,
+          "capacity_before": 1,
+          "capacity_after": 3,
+          "ns": 458
+        },
+        {
+          "step": 3,
+          "capacity_before": 3,
+          "capacity_after": 7,
+          "ns": 125
+        },
+        {
+          "step": 6,
+          "capacity_before": 7,
+          "capacity_after": 15,
+          "ns": 250
+        },
+        {
+          "step": 14,
+          "capacity_before": 15,
+          "capacity_after": 31,
+          "ns": 250
+        },
+        {
+          "step": 28,
+          "capacity_before": 31,
+          "capacity_after": 63,
+          "ns": 334
+        },
+        {
+          "step": 56,
+          "capacity_before": 63,
+          "capacity_after": 127,
+          "ns": 500
+        },
+        {
+          "step": 112,
+          "capacity_before": 127,
+          "capacity_after": 255,
+          "ns": 1583
+        },
+        {
+          "step": 224,
+          "capacity_before": 255,
+          "capacity_after": 511,
+          "ns": 2292
+        },
+        {
+          "step": 448,
+          "capacity_before": 511,
+          "capacity_after": 1023,
+          "ns": 3958
+        },
+        {
+          "step": 896,
+          "capacity_before": 1023,
+          "capacity_after": 2047,
+          "ns": 7292
+        },
+        {
+          "step": 1792,
+          "capacity_before": 2047,
+          "capacity_after": 4095,
+          "ns": 13084
+        },
+        {
+          "step": 3584,
+          "capacity_before": 4095,
+          "capacity_after": 8191,
+          "ns": 27333
+        },
+        {
+          "step": 7168,
+          "capacity_before": 8191,
+          "capacity_after": 16383,
+          "ns": 48083
+        },
+        {
+          "step": 14336,
+          "capacity_before": 16383,
+          "capacity_after": 32767,
+          "ns": 94333
+        }
+      ]
+    }
+  ]
+}

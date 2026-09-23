@@ -1,0 +1,44 @@
+[package]
+name = "strategy-oms"
+version = "0.4.0"
+edition = "2024"
+description = "Single-writer strategy order core with indexed views and deterministic recovery"
+license = "MIT"
+
+[dependencies]
+
+[features]
+# Legacy build feature names retained for compatibility. Select experimental
+# indexes explicitly with Engine::new_with_index / recover_with_index.
+pooled-index = []
+paged-index = []
+
+[[bench]]
+name = "index_comparison"
+harness = false
+
+[[bench]]
+name = "locator_exploration"
+harness = false
+
+[[bench]]
+name = "clustered_index"
+harness = false
+
+[[bench]]
+name = "latency"
+harness = false
+
+[[bench]]
+name = "groups_latency"
+harness = false
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+
+# Matched baseline for the C++ comparison: -O3, one codegen unit, no LTO.
+[profile.parity]
+inherits = "release"
+lto = false
+codegen-units = 1

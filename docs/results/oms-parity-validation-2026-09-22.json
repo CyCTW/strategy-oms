@@ -1,0 +1,42 @@
+{
+  "trace_sha256": "d865c48909fed94588e5c5b524cbb8cf727cb0700e8331c5b8b8d67d42510772",
+  "steps": 1202,
+  "backends": {
+    "standard": {
+      "matched": true,
+      "output_sha256": "4b7a5c1114baf7404d8dc6adfa27a0ddc1c50a420e3a984ed985396fb5e444c0",
+      "outcomes": {
+        "OK": 1182,
+        "ConflictingDuplicate": 2,
+        "DuplicateId": 1,
+        "StaleVersion": 1,
+        "CancelRequested": 1,
+        "RiskLimit": 1,
+        "SequenceGap": 1,
+        "Journal": 2,
+        "Halted": 1,
+        "Capacity": 4,
+        "Invalid": 5,
+        "UnknownOrder": 1
+      }
+    },
+    "pages": {
+      "matched": true,
+      "output_sha256": "4b7a5c1114baf7404d8dc6adfa27a0ddc1c50a420e3a984ed985396fb5e444c0",
+      "outcomes": {
+        "OK": 1182,
+        "ConflictingDuplicate": 2,
+        "DuplicateId": 1,
+        "StaleVersion": 1,
+        "CancelRequested": 1,
+        "RiskLimit": 1,
+        "SequenceGap": 1,
+        "Journal": 2,
+        "Halted": 1,
+        "Capacity": 4,
+        "Invalid": 5,
+        "UnknownOrder": 1
+      }
+    }
+  }
+}
