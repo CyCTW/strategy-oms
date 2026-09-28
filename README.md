@@ -16,6 +16,8 @@ C++ 另已完成 [線性搜尋實驗](docs/cpp-linear.md)，以六輪量測比�
 
 新增 [Hash＋有序樹價格索引實驗](docs/price-dual.md)：沿用完整 C++ OMS，比較 B-tree、稀疏分頁與價格 hash＋B-tree；查詢收益、更新成本及擴容尖峰見 [六輪結果](docs/price-dual-results.md)。
 
+新增 [雙端排序陣列與自適應定位器](docs/sorted-deque.md)：在同一套 C++ 測試與量測中，加入兩端留空位的排序陣列（AoS／SoA）與「少量價位用陣列、超過 1,024 價位轉 B-tree」的自適應定位器，並補上隨機重定價的最壞情況。Linux x86 上以 1 ns 解析度計時，每 Book 4–128 價時，雙端陣列的索引更新 p99 比 B-tree 低 30–50%；約 1,000 價以上的隨機重定價則是 B-tree 明顯較快。Rust 預設沒有修改，詳見[量測摘要](docs/sorted-deque-results.md)。
+
 Rust 單一寫入者訂單核心：管理多策略掛單、查詢價格層、處理撤改單與成交回報，並透過事件日誌重建狀態。v0.3 的單張 `apply(New/Replace/Cancel)` 已支援最新意圖：在途時保存更新，等回報後執行最新撤改單。Group 則負責多張子單的共同目標、拆單、補量及群組政策。兩者位於同一個 Engine。此版本使用模擬 Gateway，沒有連接真實交易帳戶。
 
 ## 執行

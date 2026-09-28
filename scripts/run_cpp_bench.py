@@ -12,7 +12,7 @@ from pathlib import Path
 root = Path(__file__).resolve().parents[1]
 parser = argparse.ArgumentParser()
 parser.add_argument('--samples', type=int, default=20_000)
-parser.add_argument('--rounds', type=int, default=5)
+parser.add_argument('--rounds', type=int, default=12)  # 6 backends: balanced order needs 12
 parser.add_argument('--tag', default=datetime.date.today().isoformat())
 args = parser.parse_args()
 if not (0 < args.samples <= 1_000_000 and args.rounds > 0):

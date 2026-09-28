@@ -1,6 +1,8 @@
 #include "flow.hpp"
+#include "linear_index.hpp"
 #include "measure.hpp"
 #include "oms_index.hpp"
+#include "sorted_deque_locator.hpp"
 #include <string>
 using namespace oms;
 using namespace measurement;
@@ -314,21 +316,32 @@ int main() {
   const std::size_t n = env_n ? std::stoull(env_n) : 20000,
                     rounds = counting ? 1
                              : env_r  ? std::stoull(env_r)
-                                      : 5;
+                                      : 12;
   if (n == 0 || rounds == 0 || n > 1'000'000)
     throw std::invalid_argument(
         "invalid benchmark size (guard, not index limit)");
   std::cout << "pass,round,backend,scenario,metric,n,p50_ns,p99_ns,p999_ns,max_"
                "ns,allocations,allocated_bytes\n";
-  for (std::size_t r = 0; r < rounds; ++r) {
-    if (r % 2 == 0) {
-      run<BtreeLocator>("absl_btree", n, r);
-      run<PagedLocator>("pool_pages", n, r);
-    } else {
-      run<PagedLocator>("pool_pages", n, r);
-      run<BtreeLocator>("absl_btree", n, r);
+  // Rotate the backend order every round and reverse it every B rounds, so
+  // each backend runs in every position equally often over 2B rounds.
+  constexpr std::size_t B = 6;
+  for (std::size_t r = 0; r < rounds; ++r)
+    for (std::size_t k = 0; k < B; ++k) {
+      const auto pos = (r / B) % 2 ? B - 1 - k : k;
+      const auto b = (r + pos) % B;
+      if (b == 0)
+        run<BtreeLocator>("absl_btree", n, r);
+      else if (b == 1)
+        run<PagedLocator>("pool_pages", n, r);
+      else if (b == 2)
+        run<SortedDequeLocator>("sorted_deque", n, r);
+      else if (b == 3)
+        run<SortedDequeSoaLocator>("sorted_deque_soa", n, r);
+      else if (b == 4)
+        run<LinearLocator>("linear_prices", n, r);
+      else
+        run<AdaptiveLocator<>>("adaptive", n, r);
     }
-  }
   if constexpr (!counting) {
     Sample timer(n);
     for (std::size_t i = 0; i < n; ++i)

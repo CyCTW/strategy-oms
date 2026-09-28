@@ -22,6 +22,7 @@
 ## 檔案
 
 - `include/oms_index.hpp`：Index、兩個 locator、分段 Pool 與 generation handles。
+- `include/sorted_deque_locator.hpp`：雙端排序陣列（AoS／SoA）與自適應（陣列↔B-tree）locator，見 [說明](../docs/sorted-deque.md)。
 - `include/flow.hpp`：簡化的 latest Replace 意圖／回報測試流程。
 - `include/measure.hpp`：計時、配置計數及分位數輸出。
 - `tests.cpp`：獨立重建參考模型、隨機差異測試、頁面／整數邊界、Pool 重用與在途情境。
