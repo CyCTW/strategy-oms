@@ -1,6 +1,7 @@
 #include "flow.hpp"
 #include "linear_index.hpp"
 #include "measure.hpp"
+#include "sorted_deque_locator.hpp"
 #include <string>
 
 using namespace oms;
@@ -190,6 +191,37 @@ void updates(std::string_view backend, std::size_t width, std::size_t n,
            {&rehang, "index_reactivate"}})
     s->print(round, backend, scenario, label);
 }
+// Random reprice: a random order moves to a uniformly random sparse price, so
+// price levels are created and removed at random positions. This is the worst
+// case for contiguous arrays (memmove) and neutral for trees.
+template <class I>
+void reprice(std::string_view backend, std::size_t width, std::size_t n,
+             std::size_t round) {
+  Store<I> store;
+  std::uint64_t seed = 29;
+  for (std::size_t i = 0; i < width; ++i)
+    store.add(make_order(i, Price(rng(seed) % 100'000'000)));
+  Sample submit(n), ack(n);
+  for (std::size_t step = 0; step < n; ++step) {
+    const auto id = rng(seed) % width;
+    auto next = store.at(id).order;
+    const Price p = Price(rng(seed) % 100'000'000);
+    next.pending = Pending{Kind::Replace, p, next.total};
+    submit.measure([&] {
+      escape(next);
+      store.update(id, next);
+    });
+    next.price = p;
+    next.pending.reset();
+    ack.measure([&] {
+      escape(next);
+      store.update(id, next);
+    });
+  }
+  const auto scenario = "reprice_random_" + std::to_string(width);
+  submit.print(round, backend, scenario, "index_replace_submit");
+  ack.print(round, backend, scenario, "index_replace_ack_visible");
+}
 template <class I>
 void mixed(std::string_view backend, std::size_t width, std::size_t q,
            std::size_t n, std::size_t round) {
@@ -316,6 +348,9 @@ void run(std::string_view backend, std::size_t n, std::size_t round) {
   }
   for (auto width : {32U, 4096U})
     queries<I>(backend, width, true, std::min(n, std::size_t{4000}), round);
+  for (auto width : {8U, 32U, 128U, 1024U, 4096U})
+    reprice<I>(backend, width,
+               width >= 1024 ? std::min(n, std::size_t{4000}) : n, round);
   for (auto width : {4U, 32U, 128U, 4096U})
     for (auto q : {0U, 1U, 4U, 16U})
       mixed<I>(backend, width, q,
@@ -331,25 +366,33 @@ int main() {
   const std::size_t n = en ? std::stoull(en) : 20000,
                     rounds = counting ? 1
                              : er     ? std::stoull(er)
-                                      : 6;
+                                      : 12;
   if (!n || !rounds || n > 1'000'000)
     throw std::invalid_argument(
         "benchmark resource guard (not index capacity)");
   std::cout << "pass,round,backend,scenario,metric,n,p50_ns,p99_ns,p999_ns,max_"
                "ns,allocations,allocated_bytes\n";
-  // All six permutations balance position and immediate predecessor effects.
-  constexpr std::array<std::array<int, 3>, 6> permutations{
-      {{0, 1, 2}, {2, 1, 0}, {1, 2, 0}, {0, 2, 1}, {2, 0, 1}, {1, 0, 2}}};
+  // Rotate the backend order every round and reverse it every B rounds, so
+  // each backend runs in every position equally often over 2B rounds.
+  constexpr std::size_t B = 6;
   for (std::size_t r = 0; r < rounds; ++r)
-    for (const auto b : permutations[r % permutations.size()]) {
+    for (std::size_t k = 0; k < B; ++k) {
+      const auto pos = (r / B) % 2 ? B - 1 - k : k;
+      const auto b = (r + pos) % B;
       std::cerr << "round " << r + 1 << '/' << rounds << " backend " << b
                 << (counting ? " allocation" : " timing") << '\n';
       if (b == 0)
         run<BtreeLocator>("absl_btree", n, r);
       else if (b == 1)
         run<LinearLocator>("linear_prices", n, r);
-      else
+      else if (b == 2)
         run<LinearLocator, OrderScanIndex>("linear_orders", n, r);
+      else if (b == 3)
+        run<SortedDequeLocator>("sorted_deque", n, r);
+      else if (b == 4)
+        run<SortedDequeSoaLocator>("sorted_deque_soa", n, r);
+      else
+        run<AdaptiveLocator<>>("adaptive", n, r);
     }
   if constexpr (!counting) {
     Sample timer(n);

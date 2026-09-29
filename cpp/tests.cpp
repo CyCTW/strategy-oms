@@ -2,6 +2,7 @@
 #include "hash_ordered_index.hpp"
 #include "linear_index.hpp"
 #include "oms_index.hpp"
+#include "sorted_deque_locator.hpp"
 #include <iostream>
 #include <map>
 #include <set>
@@ -362,6 +363,101 @@ template <class L, class I = Index<L>> void flow_test() {
   }
   CHECK(rejected);
 }
+// Both-end pushes, both-end removals and growth/recentering of the
+// double-ended array, checked against std::map after every step.
+template <class L> void sorted_deque_edges() {
+  PagePool pool;
+  L t;
+  std::map<Price, Handle> ref;
+  auto check = [&] {
+    std::vector<std::pair<Price, Handle>> got, expected(ref.begin(), ref.end());
+    t.range(pool, low, high, [&](Price p, Handle h) {
+      got.emplace_back(p, h);
+      return true;
+    });
+    CHECK(got == expected);
+    CHECK(t.best(pool, true) ==
+          (ref.empty() ? std::nullopt : std::optional(ref.rbegin()->first)));
+    CHECK(t.best(pool, false) ==
+          (ref.empty() ? std::nullopt : std::optional(ref.begin()->first)));
+  };
+  std::uint64_t seed = 5;
+  for (std::size_t round = 0; round < 4; ++round) {
+    for (std::size_t i = 0; i < 700; ++i) {
+      // Alternate new maximum, new minimum and a random interior price.
+      seed = seed * 6364136223846793005ULL + 1;
+      const Price p = i % 3 == 0   ? Price(i) * 1000 + 1
+                      : i % 3 == 1 ? -Price(i) * 1000 - 1
+                                   : Price((seed >> 33) % 100000) - 50000;
+      const Handle h{i, seed};
+      t.insert(pool, p, h, true);
+      ref[p] = h;
+      check();
+    }
+    while (!ref.empty()) {
+      seed = seed * 6364136223846793005ULL + 1;
+      const auto p =
+          seed % 3 == 0 ? ref.begin()->first
+          : seed % 3 == 1
+              ? ref.rbegin()->first
+              : std::next(ref.begin(), long((seed >> 33) % ref.size()))->first;
+      t.remove(pool, p);
+      ref.erase(p);
+      check();
+    }
+  }
+}
+// Keep the price count oscillating across both AdaptiveLocator thresholds so
+// promotion and demotion both run with mixed working flags; compare every step.
+void adaptive_threshold_test() {
+  PagePool pool;
+  AdaptiveLocator<16, 4> t;
+  std::map<Price, std::pair<Handle, bool>> ref;
+  std::uint64_t seed = 99;
+  std::size_t target = 0, converted = 0;
+  bool was_big = false;
+  for (std::size_t step = 0; step < 40000; ++step) {
+    seed = seed * 6364136223846793005ULL + 1;
+    if (step % 64 == 0)
+      target = (seed >> 40) % 2 ? 24 : 1; // swing between above 16 and below 4
+    const Price p = Price((seed >> 33) % 200) - 100;
+    const bool w = (seed >> 20) & 1;
+    if (ref.size() < target && !ref.contains(p)) {
+      t.insert(pool, p, Handle{step, seed}, w);
+      ref[p] = {Handle{step, seed}, w};
+    } else if (ref.size() > target && !ref.empty()) {
+      const auto victim =
+          std::next(ref.begin(), long((seed >> 12) % ref.size()))->first;
+      t.remove(pool, victim);
+      ref.erase(victim);
+    } else if (ref.contains(p)) {
+      t.working(pool, p, w);
+      ref[p].second = w;
+    }
+    converted += t.big != was_big;
+    was_big = t.big;
+    CHECK(t.get(pool, p) ==
+          (ref.contains(p) ? std::optional(ref.at(p).first) : std::nullopt));
+    std::optional<Price> buy, sell;
+    for (const auto &[key, v] : ref)
+      if (v.second) {
+        buy = key;
+        if (!sell)
+          sell = key;
+      }
+    CHECK(t.best(pool, true) == buy);
+    CHECK(t.best(pool, false) == sell);
+    std::vector<Price> got, expected;
+    t.range(pool, low, high, [&](Price key, Handle) {
+      got.push_back(key);
+      return true;
+    });
+    for (const auto &[key, v] : ref)
+      expected.push_back(key);
+    CHECK(got == expected);
+  }
+  CHECK(converted > 100); // both directions really ran many times
+}
 int main() {
   pool_test();
   reserved_test();
@@ -384,6 +480,24 @@ int main() {
   index_test<LinearLocator, OrderScanIndex>();
   cancel_rehang<LinearLocator, OrderScanIndex>();
   flow_test<LinearLocator, OrderScanIndex>();
-  std::cout << "21 test groups passed; 20k locator + 10k index transitions per "
+  locator_test<SortedDequeLocator>();
+  index_test<SortedDequeLocator>();
+  cancel_rehang<SortedDequeLocator>();
+  flow_test<SortedDequeLocator>();
+  sorted_deque_edges<SortedDequeLocator>();
+  locator_test<SortedDequeSoaLocator>();
+  index_test<SortedDequeSoaLocator>();
+  cancel_rehang<SortedDequeSoaLocator>();
+  flow_test<SortedDequeSoaLocator>();
+  sorted_deque_edges<SortedDequeSoaLocator>();
+  // Tiny thresholds so the random tests promote and demote constantly.
+  locator_test<AdaptiveLocator<16, 4>>();
+  index_test<AdaptiveLocator<16, 4>>();
+  cancel_rehang<AdaptiveLocator<16, 4>>();
+  flow_test<AdaptiveLocator<16, 4>>();
+  sorted_deque_edges<AdaptiveLocator<16, 4>>();
+  locator_test<AdaptiveLocator<>>();
+  adaptive_threshold_test();
+  std::cout << "38 test groups passed; 20k locator + 10k index transitions per "
                "backend\n";
 }

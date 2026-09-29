@@ -9,6 +9,7 @@ pub mod journal;
 pub mod model;
 mod order_store;
 mod pool;
+mod price_deque;
 mod price_pages;
 mod price_tree;
 mod single;

@@ -10,6 +10,9 @@ mod measure;
 #[path = "../src/pool.rs"]
 mod pool;
 #[allow(dead_code, unused_imports)]
+#[path = "../src/price_deque.rs"]
+mod price_deque;
+#[allow(dead_code, unused_imports)]
 #[path = "../src/price_pages.rs"]
 mod price_pages;
 #[allow(dead_code, unused_imports)]
@@ -48,6 +51,7 @@ fn backend(name: &str) -> IndexBackend {
     match name {
         "standard" => IndexBackend::Standard,
         "pages" => IndexBackend::PooledPages,
+        "adaptive" => IndexBackend::Adaptive,
         _ => unreachable!(),
     }
 }
@@ -55,6 +59,7 @@ fn engine_backend(name: &str) -> strategy_oms::IndexBackend {
     match name {
         "standard" => strategy_oms::IndexBackend::Standard,
         "pages" => strategy_oms::IndexBackend::PooledPages,
+        "adaptive" => strategy_oms::IndexBackend::Adaptive,
         _ => unreachable!(),
     }
 }
@@ -586,14 +591,14 @@ fn main() {
     );
     for round in 0..rounds {
         for name in if round % 2 == 0 {
-            ["standard", "pages"]
+            ["standard", "pages", "adaptive"]
         } else {
-            ["pages", "standard"]
+            ["adaptive", "pages", "standard"]
         } {
             run(name, n, round, false);
         }
     }
-    for name in ["standard", "pages"] {
+    for name in ["standard", "pages", "adaptive"] {
         run(name, n, 0, true);
     }
     let mut timer = Samples::new(n);

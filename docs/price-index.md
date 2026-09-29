@@ -2,7 +2,9 @@
 
 ## 決策
 
-預設採用 `IndexBackend::Standard`：保留標準 B-tree 做有序價格查找，搭配分段 Pool、同價差異更新、成員連結及最佳確認價快取。
+**2026-09-29 更新：預設改為 `IndexBackend::Adaptive`**，見 [自適應預設索引](adaptive-default.md)。以下是 v0.4 當時的決策紀錄；分段 Pool、同價差異更新、成員連結與最佳價快取在新預設下都不變，只換掉有序價格查找。
+
+v0.4 預設採用 `IndexBackend::Standard`：保留標準 B-tree 做有序價格查找，搭配分段 Pool、同價差異更新、成員連結及最佳確認價快取。
 
 `IndexBackend::PooledAvl` 是可執行且通過同一套測試的實驗候選，並未因為能零配置就設為預設。這不是 Pool B-tree：它使用平衡二元 AVL 樹，節點來自 Pool，parent 連結支援無配置有序走訪，subtree working flag 支援跳過只有 pending 的價格。測試結果只能代表這個候選，不能推論所有 Pool B-tree 都比較慢。
 
@@ -16,7 +18,7 @@
 - Book registry：`Book → BookHandle`，策略可預先解析一次，熱查詢直接使用 Handle。
 - PriceLevelPool：價格層只保存彙總數量、成員數與成員入口。
 - MembershipPool：每個成員有 order ID、level handle、previous、next。訂單儲存最多兩個成員 Handle，跨價改單可同時涉及舊／新價格，同價改量只計一次。
-- 有序查找：Standard 為 `BTreeMap<Price, LevelHandle>` 加 confirmed price set；PooledAvl 為 Pool 節點 AVL。
+- 有序查找：Standard 為 `BTreeMap<Price, LevelHandle>` 加 confirmed price set；PooledAvl 為 Pool 節點 AVL；Adaptive（目前預設）價位少時為 `VecDeque` 雙端排序陣列，超過 1,024 價位轉為 Standard 的兩棵樹。
 - Book 快取最佳已確認價格；unknown 訂單仍保留最後確認量，既有查詢語意不變。
 
 Pool 每塊 64 slots，這是配置粒度，並非訂單數或價格層的上限。Slots 帶 generation；回收後的舊 handle 不會指向新物件，generation 耗盡時不重用該 slot。區塊由 Box 保持物件位址穩定，區塊目錄本身是可成長的 Vec，因此擴容仍可能配置並移動目錄項目；所有慢路徑都計入量測。
@@ -57,7 +59,7 @@ for (price, level) in oms.levels_in_range(book_handle, low..=high) {
 - 查詢不傳回可修改內部結構的容器，不進行隱藏排序或 heap snapshot。
 - WAL 格式與單張／群組交易語意不變。可用另一個索引 backend 重播，BookHandle 會重新建立。
 
-建構候選：`Engine::new_with_index(journal, limits, IndexBackend::PooledAvl)`；恢復使用 `recover_with_index`。預設固定為 `IndexBackend::Standard`；`pooled-index` feature 名稱仍可用於舊建置指令，但不再改變預設 backend。
+建構候選：`Engine::new_with_index(journal, limits, IndexBackend::PooledAvl)`；恢復使用 `recover_with_index`。預設固定為 `IndexBackend::Adaptive`（2026-09-29 前為 `Standard`）；`pooled-index` feature 名稱仍可用於舊建置指令，但不再改變預設 backend。要沿用 B-tree，請明確傳入 `IndexBackend::Standard`。
 
 ## 容量與保證範圍
 

@@ -18,6 +18,9 @@ mod legacy;
 #[path = "../src/pool.rs"]
 mod pool;
 #[allow(dead_code, unused_imports)]
+#[path = "../src/price_deque.rs"]
+mod price_deque;
+#[allow(dead_code, unused_imports)]
 #[path = "../src/price_pages.rs"]
 mod price_pages;
 #[allow(dead_code, unused_imports)]
@@ -141,6 +144,7 @@ impl Harness {
             "legacy" => Self::Legacy(legacy::Index::default()),
             "standard" => Self::New(Index::new(IndexBackend::Standard)),
             "pooled" => Self::New(Index::new(IndexBackend::PooledAvl)),
+            "adaptive" => Self::New(Index::new(IndexBackend::Adaptive)),
             _ => unreachable!(),
         }
     }
@@ -281,13 +285,17 @@ fn index_run(round: usize, name: &str, scenario: &str, n: usize, counting: bool)
     growth.print(round, name, scenario, "block_growth_subset", counting);
 }
 
+fn engine_backend(name: &str) -> strategy_oms::IndexBackend {
+    match name {
+        "pooled" => strategy_oms::IndexBackend::PooledAvl,
+        "adaptive" => strategy_oms::IndexBackend::Adaptive,
+        _ => strategy_oms::IndexBackend::Standard,
+    }
+}
+
 fn engine_run(round: usize, name: &str, n: usize, counting: bool) {
     use strategy_oms::{Engine, Limits, journal::MemoryJournal};
-    let backend = if name == "pooled" {
-        strategy_oms::IndexBackend::PooledAvl
-    } else {
-        strategy_oms::IndexBackend::Standard
-    };
+    let backend = engine_backend(name);
     let limits = Limits {
         max_orders: 16,
         max_requests: 2 * n + 16,
@@ -392,11 +400,7 @@ fn engine_run(round: usize, name: &str, n: usize, counting: bool) {
 
 fn engine_growth(round: usize, name: &str, n: usize, counting: bool) {
     use strategy_oms::{Engine, Limits, journal::MemoryJournal};
-    let backend = if name == "pooled" {
-        strategy_oms::IndexBackend::PooledAvl
-    } else {
-        strategy_oms::IndexBackend::Standard
-    };
+    let backend = engine_backend(name);
     let limits = Limits {
         max_orders: n + 1,
         max_requests: n + 1,
@@ -428,11 +432,7 @@ fn engine_growth(round: usize, name: &str, n: usize, counting: bool) {
 // backlog relative to the schedule, but does not model a transport or queue cost.
 fn burst_run(round: usize, name: &str, n: usize) {
     use strategy_oms::{Engine, Limits, journal::MemoryJournal};
-    let backend = if name == "pooled" {
-        strategy_oms::IndexBackend::PooledAvl
-    } else {
-        strategy_oms::IndexBackend::Standard
-    };
+    let backend = engine_backend(name);
     let limits = Limits {
         max_orders: 1,
         max_requests: 1,
@@ -524,9 +524,9 @@ fn main() {
     println!("pass,round,backend,scenario,metric,n,p50_ns,p99_ns,p999_ns,max_ns,allocations,frees");
     for round in 0..rounds {
         let names = if round % 2 == 0 {
-            ["legacy", "standard", "pooled"]
+            ["legacy", "standard", "pooled", "adaptive"]
         } else {
-            ["pooled", "standard", "legacy"]
+            ["adaptive", "pooled", "standard", "legacy"]
         };
         for name in names {
             for scenario in [
@@ -546,7 +546,7 @@ fn main() {
             }
         }
     }
-    for name in ["legacy", "standard", "pooled"] {
+    for name in ["legacy", "standard", "pooled", "adaptive"] {
         for scenario in [
             "small",
             "crowded",
