@@ -1,5 +1,7 @@
 # 自適應預設價格索引
 
+> **2026-09-29 更新：預設已再改為 `IndexBackend::SlidingWindow`**，見 [滑動視窗價格定位器](sliding-window.md)。`Adaptive` 仍可明確選擇，也作為滑動視窗的外部定位器使用。以下是改為 Adaptive 當時的紀錄。
+
 2026-09-29 起，`IndexBackend::default()`、`Engine::new` 和 `Engine::recover` 改用 `IndexBackend::Adaptive`。這不受 `pooled-index`／`paged-index` 編譯 feature 影響。原本的 B-tree 仍可用 `Engine::new_with_index(..., IndexBackend::Standard)` 明確選擇。**WAL 格式、交易語意與公開查詢 API 都沒有改變**，同一份日誌可以用任何後端重播。
 
 ## 設計

@@ -18,7 +18,7 @@ namespace oms {
 //
 // Storage decides the memory layout only; the algorithm is identical:
 //   AosStorage: {price, handle, working} together (32 bytes per price);
-//               branchy linear scan (<= 16) / binary search.
+//               branch-free count (<= 16) / binary search.
 //   SoaStorage: prices in their own array (8 bytes per price); moves copy two
 //               arrays. Contiguous keys allow a branch-free search: count the
 //               keys below p (<= 64 prices, vectorizable), otherwise a
@@ -115,11 +115,14 @@ template <class Storage> struct SortedDeque {
       s.set(--head, p, h, w);
       return;
     }
-    bool left = i - head < tail - i;
+    // Shift the shorter side; if its end is full, recenter (or grow) first
+    // instead of shifting the longer side.
+    const bool left = i - head < tail - i;
     if (left && head == 0)
-      left = false;
-    if (!left && tail == cap)
-      left = true; // size < cap, so the left end has room
+      make_room(true);
+    else if (!left && tail == cap)
+      make_room(false);
+    i = lower(p);
     if (left) {
       s.move(head - 1, head, i - head);
       --head;
@@ -153,6 +156,13 @@ template <class Storage> struct SortedDeque {
     if (i < tail && s.price(i) == p)
       s.set_working(i, w);
   }
+  bool is_working(Price p) const {
+    const auto i = lower(p);
+    return i < tail && s.price(i) == p && s.working(i);
+  }
+  // Lowest / highest stored price; requires size() > 0.
+  Price front_price() const { return s.price(head); }
+  Price back_price() const { return s.price(tail - 1); }
   std::optional<Price> best(const PagePool &, bool buy) const {
     if (buy) {
       for (auto i = tail; i > head; --i)
@@ -194,10 +204,11 @@ private:
       return std::size_t(k - s.keys.get()) + (*k < p);
     }
     if (size() <= linear_max) {
-      auto i = head;
-      while (i < tail && s.price(i) < p)
-        ++i;
-      return i;
+      // Branch-free: count the prices below p.
+      std::size_t below = 0;
+      for (auto i = head; i < tail; ++i)
+        below += s.price(i) < p;
+      return head + below;
     }
     std::size_t lo = head, hi = tail;
     while (lo < hi) {
@@ -294,6 +305,21 @@ struct AdaptiveLocator {
   void range(const PagePool &pool, Price lo, Price hi, F &&f) const {
     big ? large.range(pool, lo, hi, std::forward<F>(f))
         : small.range(pool, lo, hi, std::forward<F>(f));
+  }
+  std::size_t size() const { return big ? large.levels.size() : small.size(); }
+  bool is_working(Price p) const {
+    return big ? large.confirmed.contains(p) : small.is_working(p);
+  }
+  // Lowest and highest stored price, O(1).
+  std::optional<std::pair<Price, Price>> bounds() const {
+    if (big)
+      return large.levels.empty()
+                 ? std::nullopt
+                 : std::optional(std::pair(large.levels.begin()->first,
+                                           large.levels.rbegin()->first));
+    return small.size() ? std::optional(std::pair(small.front_price(),
+                                                  small.back_price()))
+                        : std::nullopt;
   }
 };
 } // namespace oms

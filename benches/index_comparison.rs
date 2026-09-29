@@ -24,6 +24,9 @@ mod price_deque;
 #[path = "../src/price_pages.rs"]
 mod price_pages;
 #[allow(dead_code, unused_imports)]
+#[path = "../src/price_slide.rs"]
+mod price_slide;
+#[allow(dead_code, unused_imports)]
 #[path = "../src/price_tree.rs"]
 mod price_tree;
 use index::{Index, IndexBackend, Memberships};
@@ -145,6 +148,7 @@ impl Harness {
             "standard" => Self::New(Index::new(IndexBackend::Standard)),
             "pooled" => Self::New(Index::new(IndexBackend::PooledAvl)),
             "adaptive" => Self::New(Index::new(IndexBackend::Adaptive)),
+            "window" => Self::New(Index::new(IndexBackend::SlidingWindow)),
             _ => unreachable!(),
         }
     }
@@ -289,6 +293,7 @@ fn engine_backend(name: &str) -> strategy_oms::IndexBackend {
     match name {
         "pooled" => strategy_oms::IndexBackend::PooledAvl,
         "adaptive" => strategy_oms::IndexBackend::Adaptive,
+        "window" => strategy_oms::IndexBackend::SlidingWindow,
         _ => strategy_oms::IndexBackend::Standard,
     }
 }
@@ -523,11 +528,13 @@ fn main() {
     assert!(n > 0 && rounds > 0);
     println!("pass,round,backend,scenario,metric,n,p50_ns,p99_ns,p999_ns,max_ns,allocations,frees");
     for round in 0..rounds {
-        let names = if round % 2 == 0 {
-            ["legacy", "standard", "pooled", "adaptive"]
-        } else {
-            ["adaptive", "pooled", "standard", "legacy"]
-        };
+        // Rotate the backend order every round, reversed every len rounds.
+        let mut names = ["legacy", "standard", "pooled", "adaptive", "window"];
+        let count = names.len();
+        names.rotate_left(round % count);
+        if (round / count) % 2 == 1 {
+            names.reverse();
+        }
         for name in names {
             for scenario in [
                 "small",
@@ -546,7 +553,7 @@ fn main() {
             }
         }
     }
-    for name in ["legacy", "standard", "pooled", "adaptive"] {
+    for name in ["legacy", "standard", "pooled", "adaptive", "window"] {
         for scenario in [
             "small",
             "crowded",

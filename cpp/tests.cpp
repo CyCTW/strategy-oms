@@ -2,6 +2,7 @@
 #include "hash_ordered_index.hpp"
 #include "linear_index.hpp"
 #include "oms_index.hpp"
+#include "slide_locator.hpp"
 #include "sorted_deque_locator.hpp"
 #include <iostream>
 #include <map>
@@ -458,6 +459,127 @@ void adaptive_threshold_test() {
   }
   CHECK(converted > 100); // both directions really ran many times
 }
+// Sanitizer builds run the sliding-window walks shorter (they check the whole
+// book after every step, which is slow under ASan/UBSan instrumentation).
+#if defined(__SANITIZE_ADDRESS__)
+constexpr std::size_t walk_steps = 3000;
+#elif defined(__has_feature)
+#if __has_feature(address_sanitizer) ||                                        \
+    __has_feature(undefined_behavior_sanitizer)
+constexpr std::size_t walk_steps = 3000;
+#else
+constexpr std::size_t walk_steps = 20000;
+#endif
+#else
+constexpr std::size_t walk_steps = 20000;
+#endif
+// Sliding window: drifting center, far outliers and i64 extremes, every
+// operation, checked against std::map after each step (port of the Rust
+// random_walk test). Returns (steps whose price was in the window, total).
+template <std::size_t N>
+std::pair<std::size_t, std::size_t>
+slide_walk(std::uint64_t seed, std::uint64_t spread, std::uint64_t drift) {
+  PagePool pool;
+  SlideLocator<N> t;
+  std::map<Price, std::pair<Handle, bool>> ref;
+  std::uint64_t s = seed;
+  auto rng = [&] {
+    s = s * 6364136223846793005ULL + 1;
+    return s >> 33;
+  };
+  Price center = 0;
+  std::size_t inside = 0, total = 0;
+  for (std::size_t step = 0; step < walk_steps; ++step) {
+    const auto r = rng();
+    if (step % 10 == 0)
+      center += Price(r % (2 * drift + 1)) - Price(drift);
+    const Price p = step % 101 == 0   ? low
+                    : step % 101 == 1 ? high
+                    : step % 101 == 2 ? high - 5
+                    : step % 101 == 3 ? low + 7
+                    : step % 101 == 4
+                        ? 1'000'000'000
+                        : center + Price(r % spread) - Price(spread / 2);
+    const Handle h{step, r};
+    const bool w = (r & 8) != 0;
+    switch (r % 5) {
+    case 0:
+    case 1:
+      t.remove(pool, p);
+      ref.erase(p);
+      break;
+    case 2:
+      if (ref.contains(p)) {
+        t.working(pool, p, w);
+        ref[p].second = w;
+      }
+      break;
+    default:
+      t.insert(pool, p, h, w);
+      ref[p] = {h, w};
+    }
+    if (ref.contains(p)) {
+      ++total;
+      inside += t.window && t.window->contains(p) && t.window->has(p);
+    }
+    CHECK(t.get(pool, p) ==
+          (ref.contains(p) ? std::optional(ref.at(p).first) : std::nullopt));
+    std::optional<Price> buy, sell;
+    for (const auto &[key, v] : ref)
+      if (v.second) {
+        buy = key;
+        if (!sell)
+          sell = key;
+      }
+    CHECK(t.best(pool, true) == buy);
+    CHECK(t.best(pool, false) == sell);
+    for (auto [a, b] : std::array<std::pair<Price, Price>, 4>{
+             {{low, high}, {p, p}, {low, p}, {center - 70, center + 70}}}) {
+      if (a > b)
+        continue;
+      std::vector<std::pair<Price, Handle>> got, expected;
+      t.range(pool, a, b, [&](Price key, Handle v) {
+        got.emplace_back(key, v);
+        return true;
+      });
+      for (auto i = ref.lower_bound(a); i != ref.end() && i->first <= b; ++i)
+        expected.emplace_back(i->first, i->second.first);
+      CHECK(got == expected);
+      got.clear();
+      t.range(pool, a, b, [&](Price key, Handle v) {
+        got.emplace_back(key, v);
+        return got.size() < 3;
+      });
+      if (expected.size() > 3)
+        expected.resize(3);
+      CHECK(got == expected);
+    }
+  }
+  return {inside, total};
+}
+void slide_tests() {
+  for (auto [seed, spread, drift] : std::array<std::array<std::uint64_t, 3>, 4>{
+           {{1, 20, 3}, {2, 60, 10}, {3, 150, 40}, {4, 3000, 300}}}) {
+    auto [in64, all64] = slide_walk<64>(seed, spread, drift);
+    CHECK(in64 > 0 && in64 < all64);
+    auto [in128, all128] = slide_walk<128>(seed, spread * 2, drift);
+    CHECK(in128 > 0 && in128 < all128);
+  }
+  // Rolling book: the top level fills, a new level one tick below the
+  // bottom; every level stays in the window by sliding.
+  PagePool pool;
+  SlideLocator<64> t;
+  Price top = 1000, bottom = 970;
+  for (Price p = bottom; p <= top; ++p)
+    t.insert(pool, p, Handle{std::size_t(p), 1}, p % 3 == 0);
+  for (std::size_t step = 0; step < 5000; ++step) {
+    t.remove(pool, top--);
+    t.insert(pool, --bottom, Handle{step, 2}, step % 2 == 0);
+    CHECK(t.window && t.window->has(bottom) && t.window->has(top));
+    if (step % 2 == 0) // the new bottom is working: it is the best ask
+      CHECK(t.best(pool, false) == std::optional(bottom));
+  }
+}
 int main() {
   pool_test();
   reserved_test();
@@ -498,6 +620,13 @@ int main() {
   sorted_deque_edges<AdaptiveLocator<16, 4>>();
   locator_test<AdaptiveLocator<>>();
   adaptive_threshold_test();
-  std::cout << "38 test groups passed; 20k locator + 10k index transitions per "
+  locator_test<SlideLocator<64>>();
+  locator_test<SlideLocator<128>>();
+  index_test<SlideLocator<128>>();
+  cancel_rehang<SlideLocator<128>>();
+  flow_test<SlideLocator<128>>();
+  sorted_deque_edges<SlideLocator<128>>();
+  slide_tests();
+  std::cout << "45 test groups passed; 20k locator + 10k index transitions per "
                "backend\n";
 }

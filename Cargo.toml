@@ -26,6 +26,14 @@ name = "clustered_index"
 harness = false
 
 [[bench]]
+name = "index_micro"
+harness = false
+
+[[bench]]
+name = "locator_micro"
+harness = false
+
+[[bench]]
 name = "latency"
 harness = false
 

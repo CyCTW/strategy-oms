@@ -105,6 +105,7 @@ fn queries_and_same_price_fills_allocate_nothing_after_initialization() {
         IndexBackend::PooledAvl,
         IndexBackend::PooledPages,
         IndexBackend::Adaptive,
+        IndexBackend::SlidingWindow,
     ] {
         let mut e = Engine::new_with_index(MemoryJournal::new(100), limits(), backend).unwrap();
         let h = e.register_book(book());
@@ -182,6 +183,7 @@ fn growth_far_apart_prices_and_recovery_preserve_queries_and_invalidate_handles(
         IndexBackend::PooledAvl,
         IndexBackend::PooledPages,
         IndexBackend::Adaptive,
+        IndexBackend::SlidingWindow,
     ] {
         let mut e = Engine::new_with_index(MemoryJournal::new(8192), limits(), backend).unwrap();
         let h = e.register_book(book());
@@ -248,6 +250,7 @@ fn unchanged_price_keeps_member_links_and_best_ignores_pending_price() {
         IndexBackend::PooledAvl,
         IndexBackend::PooledPages,
         IndexBackend::Adaptive,
+        IndexBackend::SlidingWindow,
     ] {
         let mut e = Engine::new_with_index(MemoryJournal::new(100), limits(), backend).unwrap();
         new_order(&mut e, 1, 100);

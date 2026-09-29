@@ -16,6 +16,9 @@ mod price_deque;
 #[path = "../src/price_pages.rs"]
 mod price_pages;
 #[allow(dead_code, unused_imports)]
+#[path = "../src/price_slide.rs"]
+mod price_slide;
+#[allow(dead_code, unused_imports)]
 #[path = "../src/price_tree.rs"]
 mod price_tree;
 use index::{Index, IndexBackend, Memberships};
@@ -52,6 +55,7 @@ fn backend(name: &str) -> IndexBackend {
         "standard" => IndexBackend::Standard,
         "pages" => IndexBackend::PooledPages,
         "adaptive" => IndexBackend::Adaptive,
+        "window" => IndexBackend::SlidingWindow,
         _ => unreachable!(),
     }
 }
@@ -60,6 +64,7 @@ fn engine_backend(name: &str) -> strategy_oms::IndexBackend {
         "standard" => strategy_oms::IndexBackend::Standard,
         "pages" => strategy_oms::IndexBackend::PooledPages,
         "adaptive" => strategy_oms::IndexBackend::Adaptive,
+        "window" => strategy_oms::IndexBackend::SlidingWindow,
         _ => unreachable!(),
     }
 }
@@ -590,15 +595,18 @@ fn main() {
         "pass,round,backend,scenario,metric,n,p50_ns,p99_ns,p999_ns,max_ns,allocations,allocated_bytes"
     );
     for round in 0..rounds {
-        for name in if round % 2 == 0 {
-            ["standard", "pages", "adaptive"]
-        } else {
-            ["adaptive", "pages", "standard"]
-        } {
+        // Rotate the backend order every round, reversed every len rounds.
+        let mut names = ["standard", "pages", "adaptive", "window"];
+        let count = names.len();
+        names.rotate_left(round % count);
+        if (round / count) % 2 == 1 {
+            names.reverse();
+        }
+        for name in names {
             run(name, n, round, false);
         }
     }
-    for name in ["standard", "pages", "adaptive"] {
+    for name in ["standard", "pages", "adaptive", "window"] {
         run(name, n, 0, true);
     }
     let mut timer = Samples::new(n);

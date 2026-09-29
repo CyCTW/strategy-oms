@@ -163,3 +163,7 @@ python3 scripts/summarize_sorted_deque.py docs/results/sorted-deque-{clustered,l
 - [clustered alloc](results/sorted-deque-clustered-alloc-2026-09-28-linux.csv)
 - [linear alloc](results/sorted-deque-linear-alloc-2026-09-28-linux.csv)
 - [metadata](results/sorted-deque-metadata-2026-09-28-linux.json)：平台、編譯器、Abseil commit、原始碼與執行檔雜湊
+
+## 後續
+
+2026-09-29 發現雙端陣列在「較短一側已滿」時的中間插入會搬移長側，512 價隨機重定價因此被高估；已在 Rust 與 C++ 修正，見 [滑動視窗價格定位器](sliding-window.md#過程中修正的錯誤)。本文數字保留為當時紀錄。之後的預設改為 `IndexBackend::SlidingWindow`。

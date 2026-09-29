@@ -1,6 +1,8 @@
 # Strategy OMS
 
-**2026-09-29 起預設價格索引改為 `IndexBackend::Adaptive`**：每個 Book 價位少時用雙端排序陣列，超過 1,024 價位自動轉成原本的 B-tree，低於 256 價位再轉回。Rust 量測中，索引更新 p99 在多數近價群情境比 B-tree 低，例如 128 價持續換價 368 vs 757 ns；穩態更新幾乎不配置記憶體。完整 Engine 三段延遲則與 B-tree 相當。決策、數據與取捨見 [自適應預設索引](docs/adaptive-default.md)。原本的 B-tree 仍可用 `IndexBackend::Standard` 明確選擇。
+**2026-09-29 起預設價格索引改為 `IndexBackend::SlidingWindow`**：每個 Book 的近價群放在 128 格環形滑動視窗（價格 mod 128 定址、位元圖查最佳價），視窗隨近價群移動，遠價放在外部雙端排序陣列（大時轉 B-tree）；價位不超過 8 個的 Book 不建立視窗。在 Rust 與 C++ 的批次量測中，16–128 價近價群的查詢、改單、滾動都是所有候選中最快，例如 C++ 32 價 get 5.6 ns（B-tree 24.0）、改單到頂端 13.5 ns（B-tree 146）。決策、數據與取捨見 [滑動視窗價格定位器](docs/sliding-window.md)、[量測摘要](docs/sliding-window-results.md)。
+
+先前的預設 `IndexBackend::Adaptive`：每個 Book 價位少時用雙端排序陣列，超過 1,024 價位自動轉成原本的 B-tree，低於 256 價位再轉回。Rust 量測中，索引更新 p99 在多數近價群情境比 B-tree 低，例如 128 價持續換價 368 vs 757 ns；穩態更新幾乎不配置記憶體。完整 Engine 三段延遲則與 B-tree 相當。決策、數據與取捨見 [自適應預設索引](docs/adaptive-default.md)。它與原本的 B-tree（`IndexBackend::Standard`）仍可明確選擇。
 
 v0.4 的價格索引候選比較（B-tree、Pool AVL）見 [索引設計與 API 遷移](docs/price-index.md)、[量測結果](docs/index-benchmark-results.md)。
 

@@ -3,6 +3,7 @@ use crate::{
     pool::{Handle, Pool},
     price_deque::{AdaptiveLocator, AdaptiveRange},
     price_pages::{PageLocator, PagePool, PageRange},
+    price_slide::{SlideLocator, SlideRange},
     price_tree::{PriceForest, TreeRange},
 };
 use std::{
@@ -47,10 +48,15 @@ pub enum IndexBackend {
     PooledAvl,
     /// Experimental sparse pages; each page spans 64 raw price units.
     PooledPages,
-    /// Default. Sorted double-ended array per Book, converting to the Standard
-    /// B-tree pair past 1,024 prices and back below 256 (docs/sorted-deque.md).
-    #[default]
+    /// Sorted double-ended array per Book, converting to the Standard B-tree
+    /// pair past 1,024 prices and back below 256 (docs/sorted-deque.md).
     Adaptive,
+    /// Default. A 128-slot circular window that slides with the near-market
+    /// prices, plus a sorted array (B-tree pair when large) for prices outside
+    /// it; Books with at most 8 prices use the array only
+    /// (docs/sliding-window.md).
+    #[default]
+    SlidingWindow,
 }
 /// Process-local, index-specific handle. Invalid after Engine recreation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -142,6 +148,7 @@ enum Locator {
     },
     Pages(PageLocator),
     Adaptive(AdaptiveLocator),
+    Window(SlideLocator<u128, 128>),
 }
 impl Locator {
     fn new(backend: IndexBackend) -> Self {
@@ -153,6 +160,7 @@ impl Locator {
             IndexBackend::PooledAvl => Self::Pooled { root: None },
             IndexBackend::PooledPages => Self::Pages(PageLocator::default()),
             IndexBackend::Adaptive => Self::Adaptive(AdaptiveLocator::default()),
+            IndexBackend::SlidingWindow => Self::Window(SlideLocator::default()),
         }
     }
     fn get(&self, forest: &PriceForest, pages: &PagePool, p: Price) -> Option<Handle> {
@@ -161,6 +169,7 @@ impl Locator {
             Self::Pooled { root } => forest.get(*root, p),
             Self::Pages(locator) => locator.get(pages, p),
             Self::Adaptive(locator) => locator.get(p),
+            Self::Window(locator) => locator.get(p),
         }
     }
     fn insert(
@@ -181,6 +190,40 @@ impl Locator {
             Self::Pooled { root } => *root = forest.insert(*root, p, h, working),
             Self::Pages(locator) => locator.insert(pages, p, h, working),
             Self::Adaptive(locator) => locator.insert(p, h, working),
+            Self::Window(locator) => locator.insert(p, h, working),
+        }
+    }
+    /// One search where the structure allows it; returns (level, created).
+    fn find_or_insert(
+        &mut self,
+        forest: &mut PriceForest,
+        pages: &mut PagePool,
+        p: Price,
+        make: impl FnOnce() -> Handle,
+        working: bool,
+    ) -> (Handle, bool) {
+        match self {
+            Self::Standard { levels, confirmed } => match levels.entry(p) {
+                std::collections::btree_map::Entry::Occupied(o) => (*o.get(), false),
+                std::collections::btree_map::Entry::Vacant(v) => {
+                    let h = make();
+                    v.insert(h);
+                    if working {
+                        confirmed.insert(p);
+                    }
+                    (h, true)
+                }
+            },
+            Self::Adaptive(locator) => locator.find_or_insert(p, make, working),
+            Self::Window(locator) => locator.find_or_insert(p, make, working),
+            _ => match self.get(forest, pages, p) {
+                Some(h) => (h, false),
+                None => {
+                    let h = make();
+                    self.insert(forest, pages, p, h, working);
+                    (h, true)
+                }
+            },
         }
     }
     fn remove(&mut self, forest: &mut PriceForest, pages: &mut PagePool, p: Price) {
@@ -192,6 +235,7 @@ impl Locator {
             Self::Pooled { root } => *root = forest.remove(*root, p),
             Self::Pages(locator) => locator.remove(pages, p),
             Self::Adaptive(locator) => locator.remove(p),
+            Self::Window(locator) => locator.remove(p),
         }
     }
     fn set_working(
@@ -212,6 +256,7 @@ impl Locator {
             Self::Pooled { root } => forest.set_working(*root, p, working),
             Self::Pages(locator) => locator.set_working(pages, p, working),
             Self::Adaptive(locator) => locator.set_working(p, working),
+            Self::Window(locator) => locator.set_working(p, working),
         }
     }
     fn best(&self, forest: &PriceForest, pages: &PagePool, side: Side) -> Option<Price> {
@@ -226,6 +271,7 @@ impl Locator {
             Self::Pooled { root } => forest.best(*root, side == Side::Buy),
             Self::Pages(locator) => locator.best(pages, side == Side::Buy),
             Self::Adaptive(locator) => locator.best(side == Side::Buy),
+            Self::Window(locator) => locator.best(side == Side::Buy),
         }
     }
     fn range<'a>(
@@ -248,6 +294,7 @@ impl Locator {
             Self::Adaptive(locator) => {
                 PriceIter::Adaptive(locator.range(*range.start(), *range.end()))
             }
+            Self::Window(locator) => PriceIter::Window(locator.range(*range.start(), *range.end())),
         }
     }
 }
@@ -257,6 +304,7 @@ enum PriceIter<'a> {
     Pooled(TreeRange<'a>),
     Pages(PageRange<'a>),
     Adaptive(AdaptiveRange<'a>),
+    Window(SlideRange<'a, u128, 128>),
 }
 impl Iterator for PriceIter<'_> {
     type Item = (Price, Handle);
@@ -267,6 +315,7 @@ impl Iterator for PriceIter<'_> {
             Self::Pooled(i) => i.next(),
             Self::Pages(i) => i.next(),
             Self::Adaptive(i) => i.next(),
+            Self::Window(i) => i.next(),
         }
     }
 }
@@ -512,25 +561,21 @@ impl Index {
             if next[i].is_some() {
                 continue;
             }
-            let level = if let Some(h) =
-                self.books
-                    .get(book.slot)
-                    .unwrap()
-                    .locator
-                    .get(&self.forest, &self.pages, price)
-            {
-                h
-            } else {
-                let h = self.levels.insert(Level::default());
-                self.books.get_mut(book.slot).unwrap().locator.insert(
+            // A new level holds only this contribution, so its working state
+            // is known before inserting: one locator search in total.
+            let levels = &mut self.levels;
+            let (level, created) = self
+                .books
+                .get_mut(book.slot)
+                .unwrap()
+                .locator
+                .find_or_insert(
                     &mut self.forest,
                     &mut self.pages,
                     price,
-                    h,
-                    false,
+                    || levels.insert(Level::default()),
+                    totals.confirmed_leaves > 0,
                 );
-                h
-            };
             let l = self.levels.get_mut(level).unwrap();
             let was_working = l.totals.confirmed_leaves > 0;
             let member = self.members.insert(Member {
@@ -546,7 +591,12 @@ impl Index {
             l.count += 1;
             l.totals.add(totals);
             let working = l.totals.confirmed_leaves > 0;
-            if was_working != working {
+            if created {
+                // Flag already stored by find_or_insert; only the best cache.
+                if working {
+                    self.note_working(book, new.book.side, price);
+                }
+            } else if was_working != working {
                 self.working_changed(book, new.book.side, price, working);
             }
             next[i] = Some(member);
@@ -569,6 +619,18 @@ impl Index {
             }
         } else if b.best == Some(price) {
             b.best = b.locator.best(&self.forest, &self.pages, side);
+        }
+    }
+    fn note_working(&mut self, book: BookHandle, side: Side, price: Price) {
+        let b = self.books.get_mut(book.slot).unwrap();
+        if b.best.is_none_or(|p| {
+            if side == Side::Buy {
+                price > p
+            } else {
+                price < p
+            }
+        }) {
+            b.best = Some(price);
         }
     }
     fn refresh_best(&mut self, book: BookHandle, side: Side) {
@@ -640,6 +702,7 @@ mod tests {
             IndexBackend::PooledAvl,
             IndexBackend::PooledPages,
             IndexBackend::Adaptive,
+            IndexBackend::SlidingWindow,
         ] {
             let mut index = Index::new(backend);
             let mut reference = legacy::Index::default();

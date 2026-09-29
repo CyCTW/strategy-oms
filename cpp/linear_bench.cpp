@@ -1,6 +1,7 @@
 #include "flow.hpp"
 #include "linear_index.hpp"
 #include "measure.hpp"
+#include "slide_locator.hpp"
 #include "sorted_deque_locator.hpp"
 #include <string>
 
@@ -366,7 +367,7 @@ int main() {
   const std::size_t n = en ? std::stoull(en) : 20000,
                     rounds = counting ? 1
                              : er     ? std::stoull(er)
-                                      : 12;
+                                      : 14;
   if (!n || !rounds || n > 1'000'000)
     throw std::invalid_argument(
         "benchmark resource guard (not index capacity)");
@@ -374,7 +375,7 @@ int main() {
                "ns,allocations,allocated_bytes\n";
   // Rotate the backend order every round and reverse it every B rounds, so
   // each backend runs in every position equally often over 2B rounds.
-  constexpr std::size_t B = 6;
+  constexpr std::size_t B = 7;
   for (std::size_t r = 0; r < rounds; ++r)
     for (std::size_t k = 0; k < B; ++k) {
       const auto pos = (r / B) % 2 ? B - 1 - k : k;
@@ -391,8 +392,10 @@ int main() {
         run<SortedDequeLocator>("sorted_deque", n, r);
       else if (b == 4)
         run<SortedDequeSoaLocator>("sorted_deque_soa", n, r);
-      else
+      else if (b == 5)
         run<AdaptiveLocator<>>("adaptive", n, r);
+      else
+        run<SlideLocator<128>>("window128", n, r);
     }
   if constexpr (!counting) {
     Sample timer(n);

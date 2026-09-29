@@ -23,9 +23,11 @@
 
 - `include/oms_index.hpp`：Index、兩個 locator、分段 Pool 與 generation handles。
 - `include/sorted_deque_locator.hpp`：雙端排序陣列（AoS／SoA）與自適應（陣列↔B-tree）locator，見 [說明](../docs/sorted-deque.md)。
+- `include/slide_locator.hpp`：128／64 格環形滑動視窗 locator（外部為自適應 locator），見 [說明](../docs/sliding-window.md)。
 - `include/flow.hpp`：簡化的 latest Replace 意圖／回報測試流程。
 - `include/measure.hpp`：計時、配置計數及分位數輸出。
 - `tests.cpp`：獨立重建參考模型、隨機差異測試、頁面／整數邊界、Pool 重用與在途情境。
+- `micro.cpp`：定位器層與索引層的批次 micro 量測（每批 256 次操作），executable 為 `micro`。
 - `bench.cpp`：近價移動、近遠價並存、跨頁、跳價、多 Book、持續成長與撤近掛遠。
 
 ## 建置與測試
