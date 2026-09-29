@@ -46,8 +46,8 @@ fn add(e: &mut Engine<MemoryJournal>, id: u64, price: i64) {
 }
 
 #[test]
-fn default_is_standard_under_every_feature_combination() {
-    assert_eq!(IndexBackend::default(), IndexBackend::Standard);
+fn default_is_adaptive_under_every_feature_combination() {
+    assert_eq!(IndexBackend::default(), IndexBackend::Adaptive);
     let mut e = Engine::new(MemoryJournal::new(1024), limits()).unwrap();
     let h = e.register_book(book());
     add(&mut e, 1, 100);
@@ -75,7 +75,7 @@ fn default_is_standard_under_every_feature_combination() {
 }
 
 #[test]
-fn default_btree_keeps_pending_far_price_out_of_best_and_handles_report_burst() {
+fn default_index_keeps_pending_far_price_out_of_best_and_handles_report_burst() {
     let mut e = Engine::new(MemoryJournal::new(2048), limits()).unwrap();
     let h = e.register_book(book());
     add(&mut e, 1, 100);
@@ -175,4 +175,103 @@ fn default_btree_keeps_pending_far_price_out_of_best_and_handles_report_burst() 
             .collect::<Vec<_>>(),
         vec![100]
     );
+}
+
+/// Engine-level check that a default Book converts to the B-tree past 1,024
+/// prices and back below 256, keeping best price, summaries and recovery
+/// correct on both sides of each conversion.
+#[test]
+fn default_index_crosses_both_conversion_thresholds() {
+    const N: u64 = 1_100;
+    let limits = Limits {
+        max_orders: 2 * N as usize,
+        max_requests: 4 * N as usize,
+        max_reports: 4 * N as usize,
+        max_executions: 16,
+        max_order_qty: 1_000,
+        max_open_qty_per_book: 1_000_000,
+    };
+    let mut e = Engine::new(MemoryJournal::new(16 * N as usize), limits).unwrap();
+    let h = e.register_book(book());
+    // Sparse prices on both sides of 0, so far and near prices interleave.
+    let price = |id: u64| (id as i64 - N as i64 / 2) * 1_000_003;
+    for id in 1..=N {
+        add(&mut e, id, price(id));
+    }
+    // Pending-only (unacknowledged) prices above the best bid: never working,
+    // so best must skip them in both modes and across both conversions.
+    let pending = [N + 1, N + 2, N + 3];
+    for id in pending {
+        e.apply(Event::New(NewOrder {
+            order_id: 10 * N + id,
+            request_id: 10 * N + id,
+            book: book(),
+            price: price(id),
+            total_qty: 100,
+        }))
+        .unwrap();
+    }
+    assert_eq!(e.index_stats().live_levels, N as usize + 3);
+    assert_eq!(e.best_working_price_at(h), Some(price(N)));
+    for id in [1, N / 2, N] {
+        assert_eq!(
+            e.level_summary(h, price(id))
+                .unwrap()
+                .totals
+                .confirmed_leaves,
+            100
+        );
+    }
+    assert!(e.level_summary(h, price(1) + 1).is_none());
+    let lo = price(10);
+    let hi = price(20);
+    let got: Vec<_> = e.price_range(book(), lo..=hi).map(|(p, _)| p).collect();
+    assert_eq!(got, (10..=20).map(price).collect::<Vec<_>>());
+
+    // Cancel from the top (best bid) down to 200 prices: crosses 256.
+    for id in (201..=N).rev() {
+        let version = e.order(id).unwrap().version;
+        e.apply(Event::Cancel {
+            order_id: id,
+            request_id: N + id,
+            expected_version: version,
+        })
+        .unwrap();
+        e.on_report(Report {
+            source: 1,
+            sequence: e.last_sequence(1) + 1,
+            order_id: id,
+            kind: ReportKind::Canceled {
+                request_id: Some(N + id),
+            },
+        })
+        .unwrap();
+    }
+    assert_eq!(e.index_stats().live_levels, 203);
+    assert_eq!(e.best_working_price_at(h), Some(price(200)));
+    assert_eq!(
+        e.level_summary(h, price(N + 1))
+            .unwrap()
+            .totals
+            .pending_new_qty,
+        100
+    );
+    assert!(e.level_summary(h, price(201)).is_none());
+    assert_eq!(
+        e.level_summary(h, price(1))
+            .unwrap()
+            .totals
+            .confirmed_leaves,
+        100
+    );
+
+    let events = e.journal().events();
+    let recovered = Engine::recover(
+        MemoryJournal::from_events(events, 16 * N as usize).unwrap(),
+        events,
+        limits,
+    )
+    .unwrap();
+    assert_eq!(recovered.best_working_price(book()), Some(price(200)));
+    assert_eq!(recovered.index_stats().live_levels, 203);
 }

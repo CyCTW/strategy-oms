@@ -1,6 +1,7 @@
 use crate::{
     model::*,
     pool::{Handle, Pool},
+    price_deque::{AdaptiveLocator, AdaptiveRange},
     price_pages::{PageLocator, PagePool, PageRange},
     price_tree::{PriceForest, TreeRange},
 };
@@ -41,12 +42,15 @@ impl Totals {
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub enum IndexBackend {
-    /// Stable default; experiments require explicit selection.
-    #[default]
+    /// BTreeMap/BTreeSet for every Book; still selectable explicitly.
     Standard,
     PooledAvl,
     /// Experimental sparse pages; each page spans 64 raw price units.
     PooledPages,
+    /// Default. Sorted double-ended array per Book, converting to the Standard
+    /// B-tree pair past 1,024 prices and back below 256 (docs/sorted-deque.md).
+    #[default]
+    Adaptive,
 }
 /// Process-local, index-specific handle. Invalid after Engine recreation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -137,6 +141,7 @@ enum Locator {
         root: Option<Handle>,
     },
     Pages(PageLocator),
+    Adaptive(AdaptiveLocator),
 }
 impl Locator {
     fn new(backend: IndexBackend) -> Self {
@@ -147,6 +152,7 @@ impl Locator {
             },
             IndexBackend::PooledAvl => Self::Pooled { root: None },
             IndexBackend::PooledPages => Self::Pages(PageLocator::default()),
+            IndexBackend::Adaptive => Self::Adaptive(AdaptiveLocator::default()),
         }
     }
     fn get(&self, forest: &PriceForest, pages: &PagePool, p: Price) -> Option<Handle> {
@@ -154,6 +160,7 @@ impl Locator {
             Self::Standard { levels, .. } => levels.get(&p).copied(),
             Self::Pooled { root } => forest.get(*root, p),
             Self::Pages(locator) => locator.get(pages, p),
+            Self::Adaptive(locator) => locator.get(p),
         }
     }
     fn insert(
@@ -173,6 +180,7 @@ impl Locator {
             }
             Self::Pooled { root } => *root = forest.insert(*root, p, h, working),
             Self::Pages(locator) => locator.insert(pages, p, h, working),
+            Self::Adaptive(locator) => locator.insert(p, h, working),
         }
     }
     fn remove(&mut self, forest: &mut PriceForest, pages: &mut PagePool, p: Price) {
@@ -183,6 +191,7 @@ impl Locator {
             }
             Self::Pooled { root } => *root = forest.remove(*root, p),
             Self::Pages(locator) => locator.remove(pages, p),
+            Self::Adaptive(locator) => locator.remove(p),
         }
     }
     fn set_working(
@@ -202,6 +211,7 @@ impl Locator {
             }
             Self::Pooled { root } => forest.set_working(*root, p, working),
             Self::Pages(locator) => locator.set_working(pages, p, working),
+            Self::Adaptive(locator) => locator.set_working(p, working),
         }
     }
     fn best(&self, forest: &PriceForest, pages: &PagePool, side: Side) -> Option<Price> {
@@ -215,6 +225,7 @@ impl Locator {
             }
             Self::Pooled { root } => forest.best(*root, side == Side::Buy),
             Self::Pages(locator) => locator.best(pages, side == Side::Buy),
+            Self::Adaptive(locator) => locator.best(side == Side::Buy),
         }
     }
     fn range<'a>(
@@ -234,6 +245,9 @@ impl Locator {
             Self::Pages(locator) => {
                 PriceIter::Pages(locator.range(pages, *range.start(), *range.end()))
             }
+            Self::Adaptive(locator) => {
+                PriceIter::Adaptive(locator.range(*range.start(), *range.end()))
+            }
         }
     }
 }
@@ -242,6 +256,7 @@ enum PriceIter<'a> {
     Standard(std::collections::btree_map::Range<'a, Price, Handle>),
     Pooled(TreeRange<'a>),
     Pages(PageRange<'a>),
+    Adaptive(AdaptiveRange<'a>),
 }
 impl Iterator for PriceIter<'_> {
     type Item = (Price, Handle);
@@ -251,6 +266,7 @@ impl Iterator for PriceIter<'_> {
             Self::Standard(i) => i.next().map(|(p, h)| (*p, *h)),
             Self::Pooled(i) => i.next(),
             Self::Pages(i) => i.next(),
+            Self::Adaptive(i) => i.next(),
         }
     }
 }
@@ -623,6 +639,7 @@ mod tests {
             IndexBackend::Standard,
             IndexBackend::PooledAvl,
             IndexBackend::PooledPages,
+            IndexBackend::Adaptive,
         ] {
             let mut index = Index::new(backend);
             let mut reference = legacy::Index::default();

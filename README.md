@@ -1,12 +1,14 @@
 # Strategy OMS
 
-v0.4 已完成價格索引候選比較：預設為 **標準 B-tree＋分段 Pool＋差異更新**。Pool AVL 保留為實驗候選，因本機量測並未顯示其 p99 較好。詳見 [索引設計與 API 遷移](docs/price-index.md)、[量測結果](docs/index-benchmark-results.md)。
+**2026-09-29 起預設價格索引改為 `IndexBackend::Adaptive`**：每個 Book 價位少時用雙端排序陣列，超過 1,024 價位自動轉成原本的 B-tree，低於 256 價位再轉回。Rust 量測中，索引更新 p99 在多數近價群情境比 B-tree 低，例如 128 價持續換價 368 vs 757 ns；穩態更新幾乎不配置記憶體。完整 Engine 三段延遲則與 B-tree 相當。決策、數據與取捨見 [自適應預設索引](docs/adaptive-default.md)。原本的 B-tree 仍可用 `IndexBackend::Standard` 明確選擇。
 
-目前 `Engine::new` 與 `recover` 在所有 Cargo feature 組合下均使用 B-tree。最新的[定案驗證與重跑結果](docs/btree-default.md)涵蓋在途遠價改單、重複／突發回報、價位成長及三段延遲；實驗後端需明確透過 `new_with_index`／`recover_with_index` 選擇。
+v0.4 的價格索引候選比較（B-tree、Pool AVL）見 [索引設計與 API 遷移](docs/price-index.md)、[量測結果](docs/index-benchmark-results.md)。
+
+`Engine::new` 與 `recover` 在所有 Cargo feature 組合下都使用預設後端。先前 B-tree 預設的[定案驗證](docs/btree-default.md)涵蓋在途遠價改單、重複／突發回報、價位成長及三段延遲，這些測試現在以新預設執行；其他後端需明確透過 `new_with_index`／`recover_with_index` 選擇。
 
 另已完成 [其他定位器方案探索](docs/locator-exploration.md)：比較小陣列混合索引、sorted Vec、Hash＋有序索引與稀疏分頁，並記錄升級尖峰及記憶體取捨。這些是獨立研究原型，未替換正式預設。
 
-針對「移動近價群＋少量遠價」已新增可選的 `IndexBackend::PooledPages`，接入完整 Engine 測試與三段延遲量測。預設仍為 Standard；分頁在小 Book、多 Book 與擴容方面有明確取捨，見 [情境比較](docs/clustered-index.md)。
+針對「移動近價群＋少量遠價」已新增可選的 `IndexBackend::PooledPages`，接入完整 Engine 測試與三段延遲量測。分頁不是預設；它在小 Book、多 Book 與擴容方面有明確取捨，見 [情境比較](docs/clustered-index.md)。
 
 另有 [C++20 測試版本](cpp/README.md)，比較 Abseil B-tree 與 Pool 稀疏分頁，包含索引差異測試、UBSan 及可重跑的五輪量測。它移植價格索引並提供簡化流程原型，尚非完整 OMS 重寫；見 [C++ 結果與驗證限制](docs/cpp-index.md)。
 
@@ -16,7 +18,7 @@ C++ 另已完成 [線性搜尋實驗](docs/cpp-linear.md)，以六輪量測比�
 
 新增 [Hash＋有序樹價格索引實驗](docs/price-dual.md)：沿用完整 C++ OMS，比較 B-tree、稀疏分頁與價格 hash＋B-tree；查詢收益、更新成本及擴容尖峰見 [六輪結果](docs/price-dual-results.md)。
 
-新增 [雙端排序陣列與自適應定位器](docs/sorted-deque.md)：在同一套 C++ 測試與量測中，加入兩端留空位的排序陣列（AoS／SoA）與「少量價位用陣列、超過 1,024 價位轉 B-tree」的自適應定位器，並補上隨機重定價的最壞情況。Linux x86 上以 1 ns 解析度計時，每 Book 4–128 價時，雙端陣列的索引更新 p99 比 B-tree 低 30–50%；約 1,000 價以上的隨機重定價則是 B-tree 明顯較快。Rust 預設沒有修改，詳見[量測摘要](docs/sorted-deque-results.md)。
+新增 [雙端排序陣列與自適應定位器](docs/sorted-deque.md)：在同一套 C++ 測試與量測中，加入兩端留空位的排序陣列（AoS／SoA）與「少量價位用陣列、超過 1,024 價位轉 B-tree」的自適應定位器，並補上隨機重定價的最壞情況。Linux x86 上以 1 ns 解析度計時，每 Book 4–128 價時，雙端陣列的索引更新 p99 比 B-tree 低 30–50%；約 1,000 價以上的隨機重定價則是 B-tree 明顯較快。詳見[量測摘要](docs/sorted-deque-results.md)；Rust 移植與預設切換見 [自適應預設索引](docs/adaptive-default.md)。
 
 Rust 單一寫入者訂單核心：管理多策略掛單、查詢價格層、處理撤改單與成交回報，並透過事件日誌重建狀態。v0.3 的單張 `apply(New/Replace/Cancel)` 已支援最新意圖：在途時保存更新，等回報後執行最新撤改單。Group 則負責多張子單的共同目標、拆單、補量及群組政策。兩者位於同一個 Engine。此版本使用模擬 Gateway，沒有連接真實交易帳戶。
 
@@ -165,6 +167,6 @@ let oms = Engine::recover(journal, &events, Limits::default())?;
 
 本次結果與量測限制見 [本機量測紀錄](docs/benchmark.md)。
 
-訂單、價格層與成員採分段 Pool；預設有序查找仍為 B-tree，支援實驗 Pool AVL。初始化後的查詢與同價成交已有無配置測試；Pool 擴充、ID maps、有序索引及檔案編碼仍可能配置，並非整個 OMS 零配置或固定最壞延遲。查詢不走資料庫。v0.4 的三段延遲、擴容與排程突發量測見 [比較結果](docs/index-benchmark-results.md)。
+訂單、價格層與成員採分段 Pool；預設有序查找為自適應定位器（價位少時用雙端排序陣列，多時用 B-tree），另可選 B-tree、Pool AVL 與分頁。初始化後的查詢與同價成交已有無配置測試；Pool 擴充、ID maps、有序索引及檔案編碼仍可能配置，並非整個 OMS 零配置或固定最壞延遲。查詢不走資料庫。v0.4 的三段延遲、擴容與排程突發量測見 [比較結果](docs/index-benchmark-results.md)。
 
 風控涵蓋每個群組及價格簿的掛單數量；群組送出另有本地固定窗口限速。不涵蓋帳戶部位、資金、名目金額、價格偏離、交易所真實限速或跨策略的完整帳戶額度。接真實市場前，需依 [設計文件](docs/design.md) 補足 Gateway、session 恢復、完整風控、行情、運維與市場相容性測試。

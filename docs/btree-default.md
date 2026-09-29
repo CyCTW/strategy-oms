@@ -1,5 +1,7 @@
 # B-tree 預設索引定案驗證
 
+> **2026-09-29 更新**：預設已改為 `IndexBackend::Adaptive`，見 [自適應預設索引](adaptive-default.md)。本文保留 2026-09-23 的定案紀錄。文中的預設後端整合測試已移到 `tests/default_index.rs`，改為驗證新預設，並新增跨越轉換門檻的測試。
+
 2026-09-23。`Engine::new`、`Engine::recover` 與 `IndexBackend::default()` 現在一律使用 `Standard`（標準 B-tree 加分段 Pool），不受 `pooled-index`／`paged-index` 編譯 feature 影響。兩個 feature 名稱保留供既有建置指令使用；實驗索引仍可由 `new_with_index`／`recover_with_index` 明確選擇。C++ 比較程式的後端選擇與先前測得的 Hash＋B-tree 結果沒有改動。
 
 價格索引的實際儲存是 `Price → LevelHandle` 的有序 B-tree，加上一棵只記錄有已確認剩餘量價位的 B-tree set。`Level`、`Member` 在可成長分段 Pool 中，訂單的 Membership 可以直接找到 Level；Book 快取最佳 working price。沒有設定最大價格距離或最大價位數；Engine 的既有容量與風控 Limits 仍獨立生效。

@@ -6,7 +6,7 @@
 - `SortedDequeSoaLocator`：同上，但價格獨立成一個陣列（SoA）
 - `AdaptiveLocator`：價位少時用雙端陣列，價位多時自動轉成 B-tree
 
-**Rust 預設索引與 C++ 既有後端都沒有修改。** 這些候選只加進 C++ 實驗程式。
+**Rust 預設索引與 C++ 既有後端都沒有修改。** 這些候選只加進 C++ 實驗程式。（2026-09-29 後續：Rust 預設已改為自適應定位器，見 [自適應預設索引](adaptive-default.md)。）
 
 ## 先檢查原本的判斷
 
@@ -112,6 +112,8 @@
 - 用正式工作負載量出每個 Book 的價位數分布與查詢／更新比例
 
 本次沒有修改 Rust `IndexBackend` 或 Engine 預設。
+
+> **2026-09-29 後續**：已移植到 Rust，並在 Rust 量測中確認索引層同樣較快；Rust 預設已改為 `IndexBackend::Adaptive`，見 [自適應預設索引](adaptive-default.md)。目標正式硬體與正式工作負載的量測仍未完成。
 
 ## 限制
 
